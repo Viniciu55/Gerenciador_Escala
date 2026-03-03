@@ -45,6 +45,7 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.12",
     "date-fns": "4.1.0",
+    "html-to-image": "^1.11.11",
     "embla-carousel-react": "8.6.0",
     "input-otp": "1.4.2",
     "lucide-react": "^0.564.0",

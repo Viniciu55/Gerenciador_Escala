@@ -38,7 +38,7 @@ export default function Home() {
             <CalendarDays className="h-7 w-7 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance text-center">
-            Gerenciador de disponibilidade
+            Escalas da Igreja
           </h1>
           <p className="text-sm text-muted-foreground text-center text-pretty">
             Selecione a escala que deseja acessar
