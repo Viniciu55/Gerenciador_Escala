@@ -1,27 +1,27 @@
 import Link from "next/link"
-import { Music, Headphones, Video, ChevronRight } from "lucide-react"
+import { Music, AudioLines, Laptop, ChevronRight } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const SCHEDULES = [
   {
     href: "/louvor",
     label: "Louvor",
-    description: "Escala da equipe de louvor com ensaios e cultos",
+    description: "Gerenciar a disponibilidade para a equipe de louvor.",
     icon: Music,
     color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   },
   {
     href: "/sonoplastia",
     label: "Sonoplastia",
-    description: "Escala da equipe de sonoplastia com ensaios e cultos",
-    icon: Headphones,
+    description: "Gerenciar a disponibilidade para a sonoplastia.",
+    icon: AudioLines,
     color: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
   },
   {
     href: "/midia",
     label: "Midia",
-    description: "Escala da equipe de midia (apenas domingos)",
-    icon: Video,
+    description: "Gerenciar a disponibilidade para a mídia.",
+    icon: Laptop,
     color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   },
 ]
@@ -49,7 +49,7 @@ export default function Home() {
         <div className="w-full max-w-md">
           <div className="mb-10 flex flex-col items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance text-center">
-              Escalas da Igreja
+              Gerenciador de escalas
             </h1>
             <p className="text-sm text-muted-foreground text-center text-pretty">
               Selecione a escala que deseja acessar

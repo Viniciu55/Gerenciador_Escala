@@ -5,14 +5,13 @@ import type { ScheduleType } from "@/lib/types"
 import { SCHEDULE_CONFIG } from "@/lib/types"
 import { ScheduleBuilder } from "@/components/schedule-builder"
 import { GlobalHeader } from "@/components/global-header"
-import { Button } from "@/components/ui/button"
-import { Home, ChevronRight, Lock } from "lucide-react"
-import Link from "next/link"
+import { ChevronRight, Blocks } from "lucide-react"
+
 
 const SCHEDULE_ICONS: Record<ScheduleType, string> = {
   louvor: "🎵",
   sonoplastia: "🎚️",
-  midia: "📡",
+  midia: "💻",
 }
 
 const SCHEDULE_COLORS: Record<ScheduleType, { bg: string; text: string; border: string; hover: string }> = {
@@ -44,6 +43,7 @@ export default function EscalaPage() {
       <ScheduleBuilder
         scheduleType={selectedType}
         onBack={() => setSelectedType(null)}
+        showMergedCells={true}
       />
     )
   }
@@ -53,17 +53,12 @@ export default function EscalaPage() {
       <GlobalHeader />
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="absolute top-20 right-4">
-          <Link href="/">
-            <Button variant="ghost" size="icon" aria-label="Inicio">
-              <Home className="h-4 w-4" />
-            </Button>
-          </Link>
         </div>
 
         <div className="w-full max-w-md space-y-6">
           <div className="flex flex-col items-center gap-2">
             <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-primary/10 text-primary">
-              <Lock className="h-6 w-6" />
+              <Blocks className="h-6 w-6" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance text-center">
               Montar Escala
@@ -94,7 +89,6 @@ export default function EscalaPage() {
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {config.description}
-                      {config.sundaysOnly ? " (somente domingos)" : ""}
                     </span>
                   </div>
                   <ChevronRight className={`ml-auto h-5 w-5 ${colors.text} opacity-50`} />

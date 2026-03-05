@@ -1,4 +1,7 @@
-import { ThemeToggle } from "@/components/theme-toggle"
+import { Home } from "lucide-react";
+import { ThemeToggle } from "./theme-toggle";
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 export function GlobalHeader() {
   return (
@@ -12,6 +15,14 @@ export function GlobalHeader() {
           />
           <span className="text-lg font-bold text-foreground">Reviver</span>
         </div>
+        <div className="absolute top-4 right-4 flex items-center gap-1">
+        <Link href="/">
+          <Button variant="ghost" size="icon" aria-label="Inicio">
+            <Home className="h-4 w-4" />
+          </Button>
+        </Link>
+        <ThemeToggle />
+      </div>
       </div>
     </header>
   )

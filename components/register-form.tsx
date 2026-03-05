@@ -4,9 +4,7 @@ import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, UserPlus, Home } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
-import Link from "next/link"
+import { ArrowLeft, UserPlus} from "lucide-react"
 import type { ScheduleType } from "@/lib/types"
 import { SCHEDULE_CONFIG } from "@/lib/types"
 
@@ -45,12 +43,6 @@ export function RegisterForm({ email, onRegistered, onBack, scheduleType }: Regi
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background p-4">
       <div className="absolute top-4 right-4 flex items-center gap-1">
-        <Link href="/">
-          <Button variant="ghost" size="icon" aria-label="Inicio">
-            <Home className="h-4 w-4" />
-          </Button>
-        </Link>
-        <ThemeToggle />
       </div>
       <div className="w-full max-w-sm">
         <button

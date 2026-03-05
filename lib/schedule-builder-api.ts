@@ -37,7 +37,7 @@ export const SOUND_ROLES = [
 ] as const
 
 export const MEDIA_ROLES = [
-  { key: 'transmissao', label: 'Transmissão', icon: '📡' },
+  { key: 'transmissao', label: 'Transmissão', icon: '💻' },
 ] as const
 
 export type BandRole = typeof BAND_ROLES[number]['key']

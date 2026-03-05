@@ -7,7 +7,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Escala da Equipe',
+  title: 'Gerenciador de escalas',
   description: 'Gerencie a disponibilidade da sua equipe de forma simples e rapida',
   generator: 'v0.app',
   icons: {

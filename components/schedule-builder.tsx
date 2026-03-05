@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
+import { GlobalHeader } from "@/components/global-header"
 import {
   ChevronLeft,
   ChevronRight,
@@ -80,6 +81,7 @@ type ViewMode = "month" | "week"
 interface ScheduleBuilderProps {
   scheduleType: ScheduleType
   onBack: () => void
+  showMergedCells?: boolean  // Only merge Thursday/Sunday cells in export when true
 }
 
 function getScheduleDays(
@@ -250,7 +252,7 @@ function MemberPickerDialog({
   )
 }
 
-export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) {
+export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false }: ScheduleBuilderProps) {
   const [monthOffset, setMonthOffset] = useState(0)
   const [viewMode, setViewMode] = useState<ViewMode>("month")
   const [selectedWeekDate, setSelectedWeekDate] = useState<Date>(new Date())
@@ -264,6 +266,8 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
     date: string
   } | null>(null)
   const [isExporting, setIsExporting] = useState(false)
+  const [rehearsalDateOverrides, setRehearsalDateOverrides] = useState<Record<string, string>>({})
+  const [editingRehearsalDate, setEditingRehearsalDate] = useState<string | null>(null)
   const exportRef = useRef<HTMLDivElement>(null)
 
   const config = SCHEDULE_CONFIG[scheduleType]
@@ -464,8 +468,24 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
 
   const monthLabel = format(currentMonthDate, "MMMM yyyy", { locale: ptBR })
 
-  // Display days is the same as schedule days (no backend changes)
-  const displayDays = scheduleDays
+  // Get display days (with visual date overrides only - no backend impact)
+  const getDisplayDays = () => {
+    if (!showMergedCells || Object.keys(rehearsalDateOverrides).length === 0 || (scheduleType !== 'louvor' && scheduleType !== 'sonoplastia')) {
+      return scheduleDays
+    }
+    // This is purely visual - doesn't affect backend, only display
+    return scheduleDays.map(day => {
+      const dow = getDay(day)
+      const dateStr = format(day, "yyyy-MM-dd")
+      if (dow === 4 && rehearsalDateOverrides[dateStr]) {
+        const overrideStr = rehearsalDateOverrides[dateStr]
+        return new Date(overrideStr + "T12:00:00")
+      }
+      return day
+    })
+  }
+
+  const displayDays = getDisplayDays()
 
   const pickerMembers = pickerOpen
     ? membersCache[pickerOpen.date] ?? []
@@ -476,7 +496,7 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
-      {/* Header */}
+      <GlobalHeader />
       <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex flex-col">
@@ -484,15 +504,10 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
               Montar Escala - {config.label}
             </h1>
             <p className="text-xs text-muted-foreground">
-              Selecione os membros para cada funcao
+              Selecione os membros para cada função
             </p>
           </div>
           <div className="flex items-center gap-1">
-            <Link href="/">
-              <Button variant="ghost" size="icon" aria-label="Inicio">
-                <Home className="h-4 w-4" />
-              </Button>
-            </Link>
             <Button
               variant="ghost"
               size="icon"
@@ -505,7 +520,7 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
         </div>
 
         {/* Month navigation */}
-        <div className="flex items-center justify-between px-4 pb-2">
+        <div className="flex items-center justify-center gap-5 px-4 pb-2">
           <Button
             variant="outline"
             size="icon"
@@ -584,8 +599,6 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
             </div>
           )}
 
-
-
           <Button
             variant="outline"
             size="sm"
@@ -647,9 +660,8 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                 />
                 <div>
                   <div className="flex items-baseline gap-2">
-                    <p className="text-sm font-bold text-foreground">Reviver</p>
                     <h2 className="text-sm font-bold text-foreground capitalize">
-                      Escala {config.label} - {monthLabel}
+                      Escala - {config.label} ({monthLabel})
                       {viewMode === "week" ? " (Semanal)" : ""}
                     </h2>
                   </div>
@@ -661,7 +673,7 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="sticky left-0 z-[5] bg-muted/60 backdrop-blur px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[130px] min-w-[130px] max-w-[130px] border-r">
-                    Funcao
+                    Função
                   </th>
                   {displayDays.map((day) => {
                     const isToday =
@@ -669,6 +681,9 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                       format(new Date(), "yyyy-MM-dd")
                     const eventLabel = EVENT_LABELS[getDay(day)] ?? ""
                     const weekdayLabel = WEEKDAY_LABELS[getDay(day)] ?? ""
+                    const dateStr = format(day, "yyyy-MM-dd")
+                    const isThursday = getDay(day) === 4
+                    const hasOverride = showMergedCells && rehearsalDateOverrides[dateStr]
                     
                     return (
                       <th
@@ -679,17 +694,63 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                             : "text-muted-foreground"
                         }`}
                       >
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-[10px] font-bold tracking-wide opacity-70">
-                            {eventLabel}
-                          </span>
-                          <span className={`text-sm font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
-                            {format(day, "dd/MM")}
-                          </span>
-                          <span className="text-[10px] font-normal normal-case tracking-normal opacity-50">
-                            ({weekdayLabel})
-                          </span>
-                        </div>
+                        {isThursday && showMergedCells && (scheduleType === 'louvor' || scheduleType === 'sonoplastia') ? (
+                          <button
+                            onClick={() => setEditingRehearsalDate(dateStr === editingRehearsalDate ? null : dateStr)}
+                            className={`w-full flex flex-col items-center gap-0.5 rounded p-1 transition-colors ${
+                              hasOverride ? "bg-blue-100/20" : "hover:bg-muted/20"
+                            }`}
+                          >
+                            <span className="text-[10px] font-bold tracking-wide opacity-70">
+                              {eventLabel}
+                            </span>
+                            <span className={`text-sm font-bold ${hasOverride ? "text-blue-600 dark:text-blue-400" : isToday ? "text-primary" : "text-foreground"}`}>
+                              {hasOverride ? rehearsalDateOverrides[dateStr] : format(day, "dd/MM")}
+                            </span>
+                            <span className="text-[10px] font-normal normal-case tracking-normal opacity-50">
+                              ({hasOverride ? "alterado" : weekdayLabel})
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[10px] font-bold tracking-wide opacity-70">
+                              {eventLabel}
+                            </span>
+                            <span className={`text-sm font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
+                              {format(day, "dd/MM")}
+                            </span>
+                            <span className="text-[10px] font-normal normal-case tracking-normal opacity-50">
+                              ({weekdayLabel})
+                            </span>
+                          </div>
+                        )}
+                        
+                        {editingRehearsalDate === dateStr && (
+                          <div className="absolute z-50 mt-1 rounded-lg border bg-background p-2 shadow-lg">
+                            <input
+                              type="date"
+                              value={rehearsalDateOverrides[dateStr] || format(day, "yyyy-MM-dd")}
+                              onChange={(e) => {
+                                setRehearsalDateOverrides({
+                                  ...rehearsalDateOverrides,
+                                  [dateStr]: e.target.value
+                                })
+                              }}
+                              className="rounded border px-2 py-1 text-xs"
+                            />
+                            <button
+                              onClick={() => {
+                                const newOverrides = { ...rehearsalDateOverrides }
+                                delete newOverrides[dateStr]
+                                setRehearsalDateOverrides(newOverrides)
+                                setEditingRehearsalDate(null)
+                              }}
+                              className="mt-1 w-full rounded bg-destructive/10 px-2 py-1 text-xs text-destructive hover:bg-destructive/20"
+                            >
+                              Limpar
+                            </button>
+                          </div>
+                        )}
                       </th>
                     )
                   })}
@@ -708,107 +769,51 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                         </span>
                       </div>
                     </td>
-                    {scheduleType === 'louvor' ? (
-                      // For louvor, merge Thursday/Sunday cells visually
-                      displayDays.filter((_, i) => i % 2 === 0).map((thursday, weekIndex) => {
-                        const sunday = displayDays[weekIndex * 2 + 1]
-                        const thursdayStr = format(thursday, "yyyy-MM-dd")
-                        const sundayStr = sunday ? format(sunday, "yyyy-MM-dd") : thursdayStr
-                        
-                        // Use the same person for both days (or the Thursday assignment)
-                        const assignment = getAssignment(thursdayStr, role.key) || getAssignment(sundayStr, role.key)
-                        
-                        return (
-                          <td
-                            key={thursdayStr}
-                            colSpan={2}
-                            className="px-2 py-2 text-center min-w-[110px]"
-                          >
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    onClick={() => handleOpenPicker(role, thursdayStr)}
-                                    className={`w-full rounded-lg border px-2 py-2 text-xs transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 ${
-                                      assignment?.member_name
-                                        ? "bg-primary/5 border-primary/20 text-foreground"
-                                        : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"
-                                    }`}
-                                  >
-                                    {assignment?.member_name ? (
-                                      <>
-                                        <UserRound className="h-3 w-3 text-primary shrink-0" />
-                                        <span className="font-medium truncate">
-                                          {assignment.member_name}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span className="text-muted-foreground/50">
-                                        --
+                    {displayDays.map((day) => {
+                      const dateStr = format(day, "yyyy-MM-dd")
+                      const assignment = getAssignment(dateStr, role.key)
+                      return (
+                        <td
+                          key={dateStr}
+                          className="px-2 py-2 text-center min-w-[110px]"
+                        >
+                          <TooltipProvider delayDuration={300}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => handleOpenPicker(role, dateStr)}
+                                  className={`w-full rounded-lg border px-2 py-2 text-xs transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 ${
+                                    assignment?.member_name
+                                      ? "bg-primary/5 border-primary/20 text-foreground"
+                                      : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"
+                                  }`}
+                                >
+                                  {assignment?.member_name ? (
+                                    <>
+                                      <UserRound className="h-3 w-3 text-primary shrink-0" />
+                                      <span className="font-medium truncate">
+                                        {assignment.member_name}
                                       </span>
-                                    )}
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  <p className="text-xs">
-                                    {assignment?.member_name
-                                      ? `${role.label}: ${assignment.member_name}`
-                                      : `Clique para escalar ${role.label}`}
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </td>
-                        )
-                      })
-                    ) : (
-                      // For other schedule types, render cells normally
-                      displayDays.map((day) => {
-                        const dateStr = format(day, "yyyy-MM-dd")
-                        const assignment = getAssignment(dateStr, role.key)
-                        return (
-                          <td
-                            key={dateStr}
-                            className="px-2 py-2 text-center min-w-[110px]"
-                          >
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    onClick={() => handleOpenPicker(role, dateStr)}
-                                    className={`w-full rounded-lg border px-2 py-2 text-xs transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 ${
-                                      assignment?.member_name
-                                        ? "bg-primary/5 border-primary/20 text-foreground"
-                                        : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"
-                                    }`}
-                                  >
-                                    {assignment?.member_name ? (
-                                      <>
-                                        <UserRound className="h-3 w-3 text-primary shrink-0" />
-                                        <span className="font-medium truncate">
-                                          {assignment.member_name}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span className="text-muted-foreground/50">
-                                        --
-                                      </span>
-                                    )}
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  <p className="text-xs">
-                                    {assignment?.member_name
-                                      ? `${role.label}: ${assignment.member_name}`
-                                      : `Clique para escalar ${role.label}`}
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </td>
-                        )
-                      })
-                    )}
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground/50">
+                                      --
+                                    </span>
+                                  )}
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top">
+                                <p className="text-xs">
+                                  {assignment?.member_name
+                                    ? `${role.label}: ${assignment.member_name}`
+                                    : `Clique para escalar ${role.label}`}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -820,7 +825,7 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
       {/* Footer */}
       <footer className="border-t px-4 py-3 bg-muted/20">
         <p className="text-xs text-center text-muted-foreground">
-          Toque em uma celula para escalar um membro
+          Toque em uma celula para escalar um voluntário
         </p>
       </footer>
 
