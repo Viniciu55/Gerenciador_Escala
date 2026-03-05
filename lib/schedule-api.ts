@@ -2,9 +2,15 @@ import { createClient } from '@/lib/supabase/client'
 import type { Member, ScheduleEntry, ScheduleStatus, ScheduleType, ConflictInfo } from '@/lib/types'
 import { SCHEDULE_CONFIG } from '@/lib/types'
 
-const supabase = createClient()
+function getClient() {
+  if (typeof window === 'undefined') {
+    throw new Error('Supabase client can only be used in the browser')
+  }
+  return createClient()
+}
 
 export async function lookupMember(email: string, scheduleType: ScheduleType): Promise<Member | null> {
+  const supabase = getClient()
   const table = SCHEDULE_CONFIG[scheduleType].membersTable
   const { data, error } = await supabase
     .from(table)
@@ -17,6 +23,7 @@ export async function lookupMember(email: string, scheduleType: ScheduleType): P
 }
 
 export async function registerMember(email: string, name: string, scheduleType: ScheduleType): Promise<Member> {
+  const supabase = getClient()
   const table = SCHEDULE_CONFIG[scheduleType].membersTable
   const { data, error } = await supabase
     .from(table)
@@ -29,6 +36,7 @@ export async function registerMember(email: string, name: string, scheduleType: 
 }
 
 export async function getAllMembers(scheduleType: ScheduleType): Promise<Member[]> {
+  const supabase = getClient()
   const table = SCHEDULE_CONFIG[scheduleType].membersTable
   const { data, error } = await supabase
     .from(table)
@@ -40,6 +48,7 @@ export async function getAllMembers(scheduleType: ScheduleType): Promise<Member[
 }
 
 export async function getScheduleEntries(startDate: string, endDate: string, scheduleType: ScheduleType): Promise<ScheduleEntry[]> {
+  const supabase = getClient()
   const table = SCHEDULE_CONFIG[scheduleType].entriesTable
   const { data, error } = await supabase
     .from(table)
@@ -57,6 +66,7 @@ export async function upsertScheduleEntry(
   status: ScheduleStatus,
   scheduleType: ScheduleType
 ): Promise<ScheduleEntry> {
+  const supabase = getClient()
   const table = SCHEDULE_CONFIG[scheduleType].entriesTable
   const { data, error } = await supabase
     .from(table)
@@ -78,6 +88,7 @@ export async function getConflicts(
   startDate: string,
   endDate: string
 ): Promise<ConflictInfo[]> {
+  const supabase = getClient()
   const otherTypes = (Object.keys(SCHEDULE_CONFIG) as ScheduleType[]).filter(
     (t) => t !== currentScheduleType
   )

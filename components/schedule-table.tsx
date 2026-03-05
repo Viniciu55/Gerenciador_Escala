@@ -7,7 +7,6 @@ import { format, addMonths, startOfMonth, endOfMonth, eachDayOfInterval, getDay 
 import { ptBR } from "date-fns/locale"
 import type { Member, ScheduleEntry, ScheduleStatus, ScheduleType, ConflictInfo } from "@/lib/types"
 import { SCHEDULE_CONFIG } from "@/lib/types"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import Link from "next/link"
 
@@ -51,7 +50,38 @@ const WEEKDAY_LABELS: Record<number, string> = {
 function getMonthScheduleDays(monthDate: Date, sundaysOnly: boolean): Date[] {
   const start = startOfMonth(monthDate)
   const end = endOfMonth(monthDate)
-  const allDays = eachDayOfInterval({ start, end })
+  let allDays = eachDayOfInterval({ start, end })
+  
+  // For non-Sunday-only schedules, we need to adjust the date range
+  if (!sundaysOnly) {
+    // If the month doesn't start on Thursday, find the first Thursday
+    const firstDay = allDays[0]
+    const firstDayOfWeek = getDay(firstDay)
+    
+    // If month starts after Thursday, include the Thursday from the previous week
+    if (firstDayOfWeek > 4) {
+      const daysToGoBack = firstDayOfWeek - 4
+      const newStart = new Date(firstDay)
+      newStart.setDate(newStart.getDate() - daysToGoBack)
+      allDays = [new Date(newStart), ...allDays]
+    } else if (firstDayOfWeek < 4) {
+      const daysToGoBack = firstDayOfWeek + 3 // Go back to Thursday of previous week
+      const newStart = new Date(firstDay)
+      newStart.setDate(newStart.getDate() - daysToGoBack)
+      allDays = [new Date(newStart), ...allDays]
+    }
+    
+    // If the month doesn't end on Sunday, extend to the next Sunday
+    const lastDay = allDays[allDays.length - 1]
+    const lastDayOfWeek = getDay(lastDay)
+    if (lastDayOfWeek !== 0) {
+      const daysToAdd = 7 - lastDayOfWeek
+      const newEnd = new Date(lastDay)
+      newEnd.setDate(newEnd.getDate() + daysToAdd)
+      allDays = [...allDays, new Date(newEnd)]
+    }
+  }
+  
   return allDays.filter((day) => {
     const dow = getDay(day)
     if (sundaysOnly) return dow === 0
@@ -245,6 +275,25 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
   const currentMember = members.find((m) => m.id === currentMemberId)
   const monthLabel = format(currentMonthDate, "MMMM yyyy", { locale: ptBR })
 
+  // Group days by week for louvor schedule (to merge rehearsal/culto cells)
+  const getGroupedDays = () => {
+    if (scheduleType !== 'louvor') return scheduleDays.map(d => [d])
+    
+    const groups: Date[][] = []
+    for (let i = 0; i < scheduleDays.length; i += 2) {
+      const thursday = scheduleDays[i]
+      const sunday = scheduleDays[i + 1]
+      if (sunday && getDay(thursday) === 4 && getDay(sunday) === 0) {
+        groups.push([thursday, sunday])
+      } else if (thursday) {
+        groups.push([thursday])
+      }
+    }
+    return groups
+  }
+
+  const groupedDays = getGroupedDays()
+
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       {/* Header */}
@@ -266,7 +315,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
                 <Home className="h-4 w-4" />
               </Button>
             </Link>
-            <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={onLogout} aria-label="Sair">
               <LogOut className="h-4 w-4" />
             </Button>
@@ -340,34 +388,80 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
                 <th className="sticky left-0 z-[5] bg-muted/60 backdrop-blur px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[110px] min-w-[110px] max-w-[110px] border-r">
                   Membro
                 </th>
-                {scheduleDays.map((day) => {
-                  const isToday =
-                    format(day, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
-                  const eventLabel = EVENT_LABELS[getDay(day)] ?? ""
-                  const weekdayLabel = WEEKDAY_LABELS[getDay(day)] ?? ""
-                  return (
-                    <th
-                      key={day.toISOString()}
-                      className={`px-2 py-2.5 text-center text-xs font-semibold min-w-[80px] ${
-                        isToday
-                          ? "text-primary bg-primary/5"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-[10px] font-bold tracking-wide opacity-70">
-                          {eventLabel}
-                        </span>
-                        <span className={`text-sm font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
-                          {format(day, "dd/MM")}
-                        </span>
-                        <span className="text-[10px] font-normal normal-case tracking-normal opacity-50">
-                          ({weekdayLabel})
-                        </span>
-                      </div>
-                    </th>
-                  )
-                })}
+                {scheduleType === 'louvor' ? (
+                  // For louvor, show grouped weeks with merged headers
+                  groupedDays.map((group, idx) => {
+                    if (group.length === 2) {
+                      // Show as single header spanning both days
+                      const thursday = group[0]
+                      const sunday = group[1]
+                      return (
+                        <th
+                          key={`group-${idx}`}
+                          colSpan={2}
+                          className="px-2 py-2.5 text-center text-xs font-semibold border-r"
+                        >
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[10px] font-bold tracking-wide opacity-70">
+                              Ensaio / Culto
+                            </span>
+                            <span className="text-sm font-bold text-foreground">
+                              {format(thursday, "dd/MM")} - {format(sunday, "dd/MM")}
+                            </span>
+                            <span className="text-[10px] font-normal normal-case tracking-normal opacity-50">
+                              (quinta - domingo)
+                            </span>
+                          </div>
+                        </th>
+                      )
+                    } else {
+                      // Single day
+                      const day = group[0]
+                      return (
+                        <th
+                          key={day.toISOString()}
+                          className="px-2 py-2.5 text-center text-xs font-semibold min-w-[80px]"
+                        >
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-sm font-bold text-foreground">
+                              {format(day, "dd/MM")}
+                            </span>
+                          </div>
+                        </th>
+                      )
+                    }
+                  })
+                ) : (
+                  // For other schedules, show all days normally
+                  scheduleDays.map((day) => {
+                    const isToday =
+                      format(day, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
+                    const eventLabel = EVENT_LABELS[getDay(day)] ?? ""
+                    const weekdayLabel = WEEKDAY_LABELS[getDay(day)] ?? ""
+                    return (
+                      <th
+                        key={day.toISOString()}
+                        className={`px-2 py-2.5 text-center text-xs font-semibold min-w-[80px] ${
+                          isToday
+                            ? "text-primary bg-primary/5"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-[10px] font-bold tracking-wide opacity-70">
+                            {eventLabel}
+                          </span>
+                          <span className={`text-sm font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
+                            {format(day, "dd/MM")}
+                          </span>
+                          <span className="text-[10px] font-normal normal-case tracking-normal opacity-50">
+                            ({weekdayLabel})
+                          </span>
+                        </div>
+                      </th>
+                    )
+                  })
+                )}
               </tr>
             </thead>
             <tbody>
@@ -402,48 +496,151 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
                         )}
                       </div>
                     </td>
-                    {scheduleDays.map((day) => {
-                      const dateStr = format(day, "yyyy-MM-dd")
-                      const status = getEntryStatus(member.id, dateStr)
-                      const cellKey = `${member.id}-${dateStr}`
-                      const saving = isSaving === cellKey
-                      const hasConflict = isCurrentUser && status === "disponivel" && conflicts.some((c) => c.date === dateStr)
+                    {scheduleType === 'louvor' ? (
+                      // For louvor, render grouped cells
+                      groupedDays.map((group, idx) => {
+                        if (group.length === 2) {
+                          // Merged cell for rehearsal+culto - must be same person
+                          const thursday = group[0]
+                          const sunday = group[1]
+                          const thursdayStr = format(thursday, "yyyy-MM-dd")
+                          const sundayStr = format(sunday, "yyyy-MM-dd")
+                          const thursdayStatus = getEntryStatus(member.id, thursdayStr)
+                          const sundayStatus = getEntryStatus(member.id, sundayStr)
+                          const cellKey = `${member.id}-${thursdayStr}`
+                          const saving = isSaving === cellKey || isSaving === `${member.id}-${sundayStr}`
+                          const hasConflict = isCurrentUser && (
+                            (thursdayStatus === "disponivel" && conflicts.some((c) => c.date === thursdayStr)) ||
+                            (sundayStatus === "disponivel" && conflicts.some((c) => c.date === sundayStr))
+                          )
 
-                      return (
-                        <td key={dateStr} className="px-2 py-2 text-center min-w-[80px]">
-                          {isCurrentUser ? (
-                            <div className="relative">
-                              <div className="flex items-center gap-0.5">
-                                <button
-                                  onClick={() => handleCellClick(member.id, dateStr)}
-                                  disabled={saving}
-                                  className={`flex-1 rounded-md transition-all active:scale-95 ${
-                                    saving ? "opacity-60" : "hover:ring-2 hover:ring-primary/30"
-                                  }`}
-                                  aria-label={`Alterar status para ${format(day, "dd/MM", { locale: ptBR })}`}
-                                >
-                                  <StatusBadge status={status} />
-                                </button>
-                                {hasConflict && (
-                                  <ConflictWarning conflicts={conflicts} date={dateStr} />
+                          return (
+                            <td key={`group-${idx}`} colSpan={2} className="px-2 py-2 text-center">
+                              {isCurrentUser ? (
+                                <div className="relative">
+                                  <div className="flex items-center gap-0.5">
+                                    <button
+                                      onClick={() => handleCellClick(member.id, thursdayStr)}
+                                      disabled={saving}
+                                      className={`flex-1 rounded-md transition-all active:scale-95 ${
+                                        saving ? "opacity-60" : "hover:ring-2 hover:ring-primary/30"
+                                      }`}
+                                      aria-label="Alterar status"
+                                    >
+                                      {/* Show status for both Thursday and Sunday - they should be the same */}
+                                      <StatusBadge status={thursdayStatus || sundayStatus} />
+                                    </button>
+                                    {hasConflict && (
+                                      <ConflictWarning conflicts={conflicts} date={thursdayStr} />
+                                    )}
+                                  </div>
+                                  {openPicker === cellKey && (
+                                    <StatusPicker
+                                      currentStatus={thursdayStatus || sundayStatus}
+                                      onSelect={(s) => {
+                                        // Set the same status for both days
+                                        handleStatusSelect(member.id, thursdayStr, s)
+                                        handleStatusSelect(member.id, sundayStr, s)
+                                      }}
+                                      onClose={() => setOpenPicker(null)}
+                                    />
+                                  )}
+                                </div>
+                              ) : (
+                                <StatusBadge status={thursdayStatus || sundayStatus} />
+                              )}
+                            </td>
+                          )
+                        } else {
+                          // Single day
+                          const day = group[0]
+                          const dateStr = format(day, "yyyy-MM-dd")
+                          const status = getEntryStatus(member.id, dateStr)
+                          const cellKey = `${member.id}-${dateStr}`
+                          const saving = isSaving === cellKey
+                          const hasConflict = isCurrentUser && status === "disponivel" && conflicts.some((c) => c.date === dateStr)
+
+                          return (
+                            <td key={dateStr} className="px-2 py-2 text-center">
+                              {isCurrentUser ? (
+                                <div className="relative">
+                                  <div className="flex items-center gap-0.5">
+                                    <button
+                                      onClick={() => handleCellClick(member.id, dateStr)}
+                                      disabled={saving}
+                                      className={`flex-1 rounded-md transition-all active:scale-95 ${
+                                        saving ? "opacity-60" : "hover:ring-2 hover:ring-primary/30"
+                                      }`}
+                                      aria-label={`Alterar status para ${format(day, "dd/MM", { locale: ptBR })}`}
+                                    >
+                                      <StatusBadge status={status} />
+                                    </button>
+                                    {hasConflict && (
+                                      <ConflictWarning conflicts={conflicts} date={dateStr} />
+                                    )}
+                                  </div>
+                                  {openPicker === cellKey && (
+                                    <StatusPicker
+                                      currentStatus={status}
+                                      onSelect={(s) =>
+                                        handleStatusSelect(member.id, dateStr, s)
+                                      }
+                                      onClose={() => setOpenPicker(null)}
+                                    />
+                                  )}
+                                </div>
+                              ) : (
+                                <StatusBadge status={status} />
+                              )}
+                            </td>
+                          )
+                        }
+                      })
+                    ) : (
+                      // For other schedules, render normally
+                      scheduleDays.map((day) => {
+                        const dateStr = format(day, "yyyy-MM-dd")
+                        const status = getEntryStatus(member.id, dateStr)
+                        const cellKey = `${member.id}-${dateStr}`
+                        const saving = isSaving === cellKey
+                        const hasConflict = isCurrentUser && status === "disponivel" && conflicts.some((c) => c.date === dateStr)
+
+                        return (
+                          <td key={dateStr} className="px-2 py-2 text-center min-w-[80px]">
+                            {isCurrentUser ? (
+                              <div className="relative">
+                                <div className="flex items-center gap-0.5">
+                                  <button
+                                    onClick={() => handleCellClick(member.id, dateStr)}
+                                    disabled={saving}
+                                    className={`flex-1 rounded-md transition-all active:scale-95 ${
+                                      saving ? "opacity-60" : "hover:ring-2 hover:ring-primary/30"
+                                    }`}
+                                    aria-label={`Alterar status para ${format(day, "dd/MM", { locale: ptBR })}`}
+                                  >
+                                    <StatusBadge status={status} />
+                                  </button>
+                                  {hasConflict && (
+                                    <ConflictWarning conflicts={conflicts} date={dateStr} />
+                                  )}
+                                </div>
+                                {openPicker === cellKey && (
+                                  <StatusPicker
+                                    currentStatus={status}
+                                    onSelect={(s) =>
+                                      handleStatusSelect(member.id, dateStr, s)
+                                    }
+                                    onClose={() => setOpenPicker(null)}
+                                  />
                                 )}
                               </div>
-                              {openPicker === cellKey && (
-                                <StatusPicker
-                                  currentStatus={status}
-                                  onSelect={(s) =>
-                                    handleStatusSelect(member.id, dateStr, s)
-                                  }
-                                  onClose={() => setOpenPicker(null)}
-                                />
-                              )}
-                            </div>
-                          ) : (
-                            <StatusBadge status={status} />
-                          )}
-                        </td>
-                      )
-                    })}
+                            ) : (
+                              <StatusBadge status={status} />
+                            )}
+                          </td>
+                        )
+                      })
+                    )}
                   </tr>
                 )
               })}

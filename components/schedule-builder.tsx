@@ -6,11 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
-  Mic,
-  MicVocal,
-  Guitar,
-  Piano,
-  Drum,
   X,
   Check,
   HelpCircle,
@@ -35,12 +30,11 @@ import { ptBR } from "date-fns/locale"
 import type { ScheduleType, ScheduleStatus } from "@/lib/types"
 import { SCHEDULE_CONFIG } from "@/lib/types"
 import {
-  BAND_ROLES,
-  type BandRole,
   type MemberAvailability,
   type BuiltScheduleEntry,
+  type RoleType,
+  getRolesForScheduleType,
 } from "@/lib/schedule-builder-api"
-import { ThemeToggle } from "@/components/theme-toggle"
 import {
   Tooltip,
   TooltipContent,
@@ -55,13 +49,7 @@ import {
 } from "@/components/ui/dialog"
 import Link from "next/link"
 
-const ROLE_ICONS: Record<string, React.ReactNode> = {
-  Mic: <Mic className="h-4 w-4" />,
-  MicVocal: <MicVocal className="h-4 w-4" />,
-  Guitar: <Guitar className="h-4 w-4" />,
-  Piano: <Piano className="h-4 w-4" />,
-  Drum: <Drum className="h-4 w-4" />,
-}
+
 
 const STATUS_STYLES: Record<
   ScheduleStatus,
@@ -101,8 +89,8 @@ function getScheduleDays(
   selectedWeekDate?: Date
 ): Date[] {
   if (viewMode === "week" && selectedWeekDate) {
-    const weekStart = startOfWeek(selectedWeekDate, { weekStartsOn: 0 })
-    const weekEnd = endOfWeek(selectedWeekDate, { weekStartsOn: 0 })
+    const weekStart = startOfWeek(selectedWeekDate, { weekStartsOn: 4 }) // Start from Thursday
+    const weekEnd = endOfWeek(selectedWeekDate, { weekStartsOn: 4 }) // End on Sunday
     const allDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
     return allDays.filter((day) => {
       const dow = getDay(day)
@@ -110,9 +98,41 @@ function getScheduleDays(
       return dow === 4 || dow === 0
     })
   }
+  
   const start = startOfMonth(monthDate)
   const end = endOfMonth(monthDate)
-  const allDays = eachDayOfInterval({ start, end })
+  let allDays = eachDayOfInterval({ start, end })
+  
+  // For non-Sunday-only schedules, we need to adjust the date range
+  if (!sundaysOnly) {
+    // If the month doesn't start on Thursday, find the first Thursday
+    const firstDay = allDays[0]
+    const firstDayOfWeek = getDay(firstDay)
+    
+    // If month starts after Thursday, include the Thursday from the previous week
+    if (firstDayOfWeek > 4) {
+      const daysToGoBack = firstDayOfWeek - 4
+      const newStart = new Date(firstDay)
+      newStart.setDate(newStart.getDate() - daysToGoBack)
+      allDays = [new Date(newStart), ...allDays]
+    } else if (firstDayOfWeek < 4) {
+      const daysToGoBack = firstDayOfWeek + 3 // Go back to Thursday of previous week
+      const newStart = new Date(firstDay)
+      newStart.setDate(newStart.getDate() - daysToGoBack)
+      allDays = [new Date(newStart), ...allDays]
+    }
+    
+    // If the month doesn't end on Sunday, extend to the next Sunday
+    const lastDay = allDays[allDays.length - 1]
+    const lastDayOfWeek = getDay(lastDay)
+    if (lastDayOfWeek !== 0) {
+      const daysToAdd = 7 - lastDayOfWeek
+      const newEnd = new Date(lastDay)
+      newEnd.setDate(newEnd.getDate() + daysToAdd)
+      allDays = [...allDays, new Date(newEnd)]
+    }
+  }
+  
   return allDays.filter((day) => {
     const dow = getDay(day)
     if (sundaysOnly) return dow === 0
@@ -136,7 +156,7 @@ function MemberPickerDialog({
   open: boolean
   onClose: () => void
   members: MemberAvailability[]
-  role: (typeof BAND_ROLES)[number]
+  role: RoleType
   date: string
   onSelect: (member: MemberAvailability) => void
   onRemove: () => void
@@ -159,7 +179,7 @@ function MemberPickerDialog({
       <DialogContent className="max-w-sm max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            {ROLE_ICONS[role.icon]}
+            <span className="text-xl">{role.icon}</span>
             <span>
               {role.label} - {format(new Date(date + "T12:00:00"), "dd/MM", { locale: ptBR })}
             </span>
@@ -240,7 +260,7 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
   >({})
   const [isLoading, setIsLoading] = useState(true)
   const [pickerOpen, setPickerOpen] = useState<{
-    role: (typeof BAND_ROLES)[number]
+    role: RoleType
     date: string
   } | null>(null)
   const [isExporting, setIsExporting] = useState(false)
@@ -323,7 +343,7 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
   }
 
   async function handleOpenPicker(
-    role: (typeof BAND_ROLES)[number],
+    role: RoleType,
     date: string
   ) {
     await loadMembersForDate(date)
@@ -397,13 +417,40 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
     setIsExporting(true)
     try {
       const { toPng } = await import("html-to-image")
-      const dataUrl = await toPng(exportRef.current, {
-        backgroundColor:
-          document.documentElement.classList.contains("dark")
-            ? "#1a1a2e"
-            : "#ffffff",
+      
+      // Get the current element's scroll dimensions
+      const element = exportRef.current
+      const scrollHeight = element.scrollHeight
+      const scrollWidth = element.scrollWidth
+      
+      // Create a wrapper with fixed dimensions to ensure consistent export
+      const wrapper = document.createElement("div")
+      wrapper.style.position = "fixed"
+      wrapper.style.top = "0"
+      wrapper.style.left = "0"
+      wrapper.style.width = scrollWidth + "px"
+      wrapper.style.height = scrollHeight + "px"
+      wrapper.style.backgroundColor = document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#ffffff"
+      wrapper.style.overflow = "hidden"
+      wrapper.style.zIndex = "-9999"
+      
+      // Clone the export element
+      const clone = element.cloneNode(true) as HTMLElement
+      wrapper.appendChild(clone)
+      document.body.appendChild(wrapper)
+      
+      // Export with fixed dimensions
+      const dataUrl = await toPng(wrapper, {
+        backgroundColor: document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#ffffff",
         pixelRatio: 2,
+        width: scrollWidth,
+        height: scrollHeight,
       })
+      
+      // Clean up
+      document.body.removeChild(wrapper)
+      
+      // Download
       const link = document.createElement("a")
       link.download = `escala-${config.label.toLowerCase()}-${format(currentMonthDate, "yyyy-MM")}${viewMode === "week" ? "-semana" : ""}.png`
       link.href = dataUrl
@@ -416,6 +463,9 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
   }
 
   const monthLabel = format(currentMonthDate, "MMMM yyyy", { locale: ptBR })
+
+  // Display days is the same as schedule days (no backend changes)
+  const displayDays = scheduleDays
 
   const pickerMembers = pickerOpen
     ? membersCache[pickerOpen.date] ?? []
@@ -443,7 +493,6 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                 <Home className="h-4 w-4" />
               </Button>
             </Link>
-            <ThemeToggle />
             <Button
               variant="ghost"
               size="icon"
@@ -535,6 +584,8 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
             </div>
           )}
 
+
+
           <Button
             variant="outline"
             size="sm"
@@ -586,12 +637,24 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
           </div>
         ) : (
           <div ref={exportRef} className="bg-background p-1">
-            {/* Title visible in export */}
-            <div className="px-3 py-3 border-b">
-              <h2 className="text-base font-bold text-foreground capitalize">
-                Escala {config.label} - {monthLabel}
-                {viewMode === "week" ? " (Semanal)" : ""}
-              </h2>
+            {/* Header with logo and text */}
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <img 
+                  src="/logo.jpg" 
+                  alt="Logo" 
+                  className="h-10 w-10 rounded-full object-cover"
+                />
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-sm font-bold text-foreground">Reviver</p>
+                    <h2 className="text-sm font-bold text-foreground capitalize">
+                      Escala {config.label} - {monthLabel}
+                      {viewMode === "week" ? " (Semanal)" : ""}
+                    </h2>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <table className="w-full text-sm border-collapse">
@@ -600,12 +663,13 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                   <th className="sticky left-0 z-[5] bg-muted/60 backdrop-blur px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[130px] min-w-[130px] max-w-[130px] border-r">
                     Funcao
                   </th>
-                  {scheduleDays.map((day) => {
+                  {displayDays.map((day) => {
                     const isToday =
                       format(day, "yyyy-MM-dd") ===
                       format(new Date(), "yyyy-MM-dd")
                     const eventLabel = EVENT_LABELS[getDay(day)] ?? ""
                     const weekdayLabel = WEEKDAY_LABELS[getDay(day)] ?? ""
+                    
                     return (
                       <th
                         key={day.toISOString()}
@@ -619,11 +683,7 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                           <span className="text-[10px] font-bold tracking-wide opacity-70">
                             {eventLabel}
                           </span>
-                          <span
-                            className={`text-sm font-bold ${
-                              isToday ? "text-primary" : "text-foreground"
-                            }`}
-                          >
+                          <span className={`text-sm font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
                             {format(day, "dd/MM")}
                           </span>
                           <span className="text-[10px] font-normal normal-case tracking-normal opacity-50">
@@ -636,63 +696,119 @@ export function ScheduleBuilder({ scheduleType, onBack }: ScheduleBuilderProps) 
                 </tr>
               </thead>
               <tbody>
-                {BAND_ROLES.map((role) => (
+                {getRolesForScheduleType(scheduleType).map((role) => (
                   <tr key={role.key} className="border-b hover:bg-muted/30 transition-colors">
                     <td className="sticky left-0 z-[5] bg-background px-3 py-2.5 w-[130px] min-w-[130px] max-w-[130px] border-r">
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 text-primary shrink-0">
-                          {ROLE_ICONS[role.icon]}
+                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 text-primary shrink-0 text-lg">
+                          {role.icon}
                         </span>
                         <span className="font-medium text-xs text-foreground truncate">
                           {role.label}
                         </span>
                       </div>
                     </td>
-                    {scheduleDays.map((day) => {
-                      const dateStr = format(day, "yyyy-MM-dd")
-                      const assignment = getAssignment(dateStr, role.key)
-                      return (
-                        <td
-                          key={dateStr}
-                          className="px-2 py-2 text-center min-w-[110px]"
-                        >
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => handleOpenPicker(role, dateStr)}
-                                  className={`w-full rounded-lg border px-2 py-2 text-xs transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 ${
-                                    assignment?.member_name
-                                      ? "bg-primary/5 border-primary/20 text-foreground"
-                                      : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"
-                                  }`}
-                                >
-                                  {assignment?.member_name ? (
-                                    <>
-                                      <UserRound className="h-3 w-3 text-primary shrink-0" />
-                                      <span className="font-medium truncate">
-                                        {assignment.member_name}
+                    {scheduleType === 'louvor' ? (
+                      // For louvor, merge Thursday/Sunday cells visually
+                      displayDays.filter((_, i) => i % 2 === 0).map((thursday, weekIndex) => {
+                        const sunday = displayDays[weekIndex * 2 + 1]
+                        const thursdayStr = format(thursday, "yyyy-MM-dd")
+                        const sundayStr = sunday ? format(sunday, "yyyy-MM-dd") : thursdayStr
+                        
+                        // Use the same person for both days (or the Thursday assignment)
+                        const assignment = getAssignment(thursdayStr, role.key) || getAssignment(sundayStr, role.key)
+                        
+                        return (
+                          <td
+                            key={thursdayStr}
+                            colSpan={2}
+                            className="px-2 py-2 text-center min-w-[110px]"
+                          >
+                            <TooltipProvider delayDuration={300}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => handleOpenPicker(role, thursdayStr)}
+                                    className={`w-full rounded-lg border px-2 py-2 text-xs transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 ${
+                                      assignment?.member_name
+                                        ? "bg-primary/5 border-primary/20 text-foreground"
+                                        : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"
+                                    }`}
+                                  >
+                                    {assignment?.member_name ? (
+                                      <>
+                                        <UserRound className="h-3 w-3 text-primary shrink-0" />
+                                        <span className="font-medium truncate">
+                                          {assignment.member_name}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-muted-foreground/50">
+                                        --
                                       </span>
-                                    </>
-                                  ) : (
-                                    <span className="text-muted-foreground/50">
-                                      --
-                                    </span>
-                                  )}
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                <p className="text-xs">
-                                  {assignment?.member_name
-                                    ? `${role.label}: ${assignment.member_name}`
-                                    : `Clique para escalar ${role.label}`}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </td>
-                      )
-                    })}
+                                    )}
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  <p className="text-xs">
+                                    {assignment?.member_name
+                                      ? `${role.label}: ${assignment.member_name}`
+                                      : `Clique para escalar ${role.label}`}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </td>
+                        )
+                      })
+                    ) : (
+                      // For other schedule types, render cells normally
+                      displayDays.map((day) => {
+                        const dateStr = format(day, "yyyy-MM-dd")
+                        const assignment = getAssignment(dateStr, role.key)
+                        return (
+                          <td
+                            key={dateStr}
+                            className="px-2 py-2 text-center min-w-[110px]"
+                          >
+                            <TooltipProvider delayDuration={300}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => handleOpenPicker(role, dateStr)}
+                                    className={`w-full rounded-lg border px-2 py-2 text-xs transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 min-h-[40px] flex items-center justify-center gap-1.5 ${
+                                      assignment?.member_name
+                                        ? "bg-primary/5 border-primary/20 text-foreground"
+                                        : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"
+                                    }`}
+                                  >
+                                    {assignment?.member_name ? (
+                                      <>
+                                        <UserRound className="h-3 w-3 text-primary shrink-0" />
+                                        <span className="font-medium truncate">
+                                          {assignment.member_name}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-muted-foreground/50">
+                                        --
+                                      </span>
+                                    )}
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  <p className="text-xs">
+                                    {assignment?.member_name
+                                      ? `${role.label}: ${assignment.member_name}`
+                                      : `Clique para escalar ${role.label}`}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </td>
+                        )
+                      })
+                    )}
                   </tr>
                 ))}
               </tbody>

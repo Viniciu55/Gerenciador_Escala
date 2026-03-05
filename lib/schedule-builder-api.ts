@@ -21,17 +21,45 @@ export interface BuiltScheduleEntry {
 }
 
 export const BAND_ROLES = [
-  { key: 'ministro', label: 'Ministro', icon: 'Mic' },
-  { key: 'voz1', label: 'Voz 1', icon: 'MicVocal' },
-  { key: 'voz2', label: 'Voz 2', icon: 'MicVocal' },
-  { key: 'violao', label: 'Violao', icon: 'Guitar' },
-  { key: 'teclado', label: 'Teclado', icon: 'Piano' },
-  { key: 'guitarra', label: 'Guitarra', icon: 'Guitar' },
-  { key: 'baixo', label: 'Baixo', icon: 'Guitar' },
-  { key: 'bateria', label: 'Bateria', icon: 'Drum' },
+  { key: 'ministro', label: 'Ministro', icon: '🎤' },
+  { key: 'voz1', label: 'Voz 1', icon: '🎙️' },
+  { key: 'voz2', label: 'Voz 2', icon: '🎙️' },
+  { key: 'violao', label: 'Violão', icon: '🎸' },
+  { key: 'teclado', label: 'Teclado', icon: '⌨️' },
+  { key: 'guitarra', label: 'Guitarra', icon: '🎸' },
+  { key: 'baixo', label: 'Baixo', icon: '🎸' },
+  { key: 'bateria', label: 'Bateria', icon: '🥁' },
+] as const
+
+export const SOUND_ROLES = [
+  { key: 'mesa_som', label: 'Mesa de Som', icon: '🎚️' },
+  { key: 'iluminacao', label: 'Iluminação', icon: '💡' },
+] as const
+
+export const MEDIA_ROLES = [
+  { key: 'transmissao', label: 'Transmissão', icon: '📡' },
 ] as const
 
 export type BandRole = typeof BAND_ROLES[number]['key']
+export type SoundRole = typeof SOUND_ROLES[number]['key']
+export type MediaRole = typeof MEDIA_ROLES[number]['key']
+export type AnyRole = BandRole | SoundRole | MediaRole
+
+export type RoleType = typeof BAND_ROLES[number] | typeof SOUND_ROLES[number] | typeof MEDIA_ROLES[number]
+
+// Helper function to get roles based on schedule type
+export function getRolesForScheduleType(scheduleType: string): RoleType[] {
+  switch (scheduleType) {
+    case 'louvor':
+      return BAND_ROLES as RoleType[]
+    case 'sonoplastia':
+      return SOUND_ROLES as RoleType[]
+    case 'midia':
+      return MEDIA_ROLES as RoleType[]
+    default:
+      return BAND_ROLES as RoleType[]
+  }
+}
 
 // Get all members with their availability for a specific date
 export async function getMembersWithAvailability(
