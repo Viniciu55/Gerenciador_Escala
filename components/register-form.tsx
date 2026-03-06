@@ -85,7 +85,7 @@ export function RegisterForm({ email, onRegistered, onBack, scheduleType }: Regi
             <Input
               id="reg-name"
               type="text"
-              placeholder="Seu nome completo"
+              placeholder="Seu nome ou apelido"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
