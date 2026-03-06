@@ -3,9 +3,9 @@
 import { useState } from "react"
 import type { ScheduleType } from "@/lib/types"
 import { SCHEDULE_CONFIG } from "@/lib/types"
-import { ScheduleBuilder } from "@/components/schedule-builder"
 import { GlobalHeader } from "@/components/global-header"
 import { ChevronRight, Blocks } from "lucide-react"
+import { ScheduleBuilder } from "@/components/schedule-builder"
 
 
 const SCHEDULE_ICONS: Record<ScheduleType, string> = {
