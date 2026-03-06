@@ -46,46 +46,28 @@ const WEEKDAY_LABELS: Record<number, string> = {
   0: "domingo",
 }
 
+// --- LÓGICA DE DATAS ---
 function getMonthScheduleDays(monthDate: Date, sundaysOnly: boolean): Date[] {
   const start = startOfMonth(monthDate)
   const end = endOfMonth(monthDate)
   let allDays = eachDayOfInterval({ start, end })
   
-  // For non-Sunday-only schedules, we need to adjust the date range
-  if (!sundaysOnly) {
-    // If the month doesn't start on Thursday, find the first Thursday
-    const firstDay = allDays[0]
-    const firstDayOfWeek = getDay(firstDay)
-    
-    // If month starts after Thursday, include the Thursday from the previous week
-    if (firstDayOfWeek > 4) {
-      const daysToGoBack = firstDayOfWeek - 4
-      const newStart = new Date(firstDay)
-      newStart.setDate(newStart.getDate() - daysToGoBack)
-      allDays = [new Date(newStart), ...allDays]
-    } else if (firstDayOfWeek < 4) {
-      const daysToGoBack = firstDayOfWeek + 3 // Go back to Thursday of previous week
-      const newStart = new Date(firstDay)
-      newStart.setDate(newStart.getDate() - daysToGoBack)
-      allDays = [new Date(newStart), ...allDays]
-    }
-    
-    // If the month doesn't end on Sunday, extend to the next Sunday
-    const lastDay = allDays[allDays.length - 1]
-    const lastDayOfWeek = getDay(lastDay)
-    if (lastDayOfWeek !== 0) {
-      const daysToAdd = 7 - lastDayOfWeek
-      const newEnd = new Date(lastDay)
-      newEnd.setDate(newEnd.getDate() + daysToAdd)
-      allDays = [...allDays, new Date(newEnd)]
+  // Filtra apenas os dias de interesse dentro do mês atual (Quintas e Domingos)
+  let filteredDays = allDays.filter((day) => {
+    const dow = getDay(day)
+    return sundaysOnly ? dow === 0 : (dow === 4 || dow === 0)
+  })
+
+  // Se o mês começar em um Domingo (0), busca a Quinta (4) do mês anterior
+  if (!sundaysOnly && filteredDays.length > 0) {
+    if (getDay(filteredDays[0]) === 0) {
+      const prevThursday = new Date(filteredDays[0])
+      prevThursday.setDate(prevThursday.getDate() - 3)
+      filteredDays = [prevThursday, ...filteredDays]
     }
   }
   
-  return allDays.filter((day) => {
-    const dow = getDay(day)
-    if (sundaysOnly) return dow === 0
-    return dow === 4 || dow === 0
-  })
+  return filteredDays
 }
 
 function StatusBadge({ status }: { status: ScheduleStatus | null }) {
@@ -254,7 +236,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
     try {
       const { upsertScheduleEntry, getConflicts } = await import("@/lib/schedule-api")
       await upsertScheduleEntry(memberId, date, newStatus, scheduleType)
-      // Refresh conflicts after updating a status
       const conflictsData = await getConflicts(currentEmail, scheduleType, monthStart, monthEnd)
       setConflicts(conflictsData)
     } catch (err) {
@@ -274,7 +255,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
   const currentMember = members.find((m) => m.id === currentMemberId)
   const monthLabel = format(currentMonthDate, "MMMM yyyy", { locale: ptBR })
 
-  // Group days by week for louvor schedule (to merge rehearsal/culto cells)
   const getGroupedDays = () => {
     if (scheduleType !== 'louvor') return scheduleDays.map(d => [d])
     
@@ -295,7 +275,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex flex-col">
@@ -315,7 +294,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
           </div>
         </div>
 
-        {/* Month navigation */}
         <div className="flex items-center justify-center gap-4 px-4 pb-3">
           <Button
             variant="outline"
@@ -341,7 +319,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
         </div>
       </header>
 
-      {/* Legend */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b bg-muted/30">
         {STATUS_OPTIONS.map((status) => {
           const statusConfig = STATUS_CONFIG[status]
@@ -362,7 +339,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
         </div>
       </div>
 
-      {/* Main table */}
       <main className="flex-1 overflow-x-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -494,7 +470,6 @@ export function ScheduleTable({ currentMemberId, currentEmail, onLogout, schedul
         )}
       </main>
 
-      {/* Footer hint */}
       <footer className="border-t px-4 py-3 bg-muted/20">
         <p className="text-xs text-center text-muted-foreground">
           Toque nas suas celulas para escolher o status
