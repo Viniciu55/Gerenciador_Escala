@@ -110,6 +110,31 @@ export async function getBuiltScheduleEntries(
   return data || []
 }
 
+// Insert a built schedule entry (allows multiple members per role/date)
+export async function insertBuiltScheduleEntry(
+  scheduleType: ScheduleType,
+  scheduleDate: string,
+  role: string,
+  memberName: string | null,
+  memberEmail: string | null
+): Promise<BuiltScheduleEntry> {
+  const { data, error } = await supabase
+    .from('built_schedules')
+    .insert({
+      schedule_type: scheduleType,
+      schedule_date: scheduleDate,
+      role,
+      member_name: memberName,
+      member_email: memberEmail,
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error) throw new Error(error.message)
+  return data
+}
+
 // Upsert a built schedule entry (assign a member to a role on a date)
 export async function upsertBuiltScheduleEntry(
   scheduleType: ScheduleType,
@@ -150,6 +175,16 @@ export async function removeBuiltScheduleEntry(
     .eq('schedule_type', scheduleType)
     .eq('schedule_date', scheduleDate)
     .eq('role', role)
+
+  if (error) throw new Error(error.message)
+}
+
+// Remove a specific schedule entry by ID
+export async function removeBuiltScheduleEntryById(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('built_schedules')
+    .delete()
+    .eq('id', id)
 
   if (error) throw new Error(error.message)
 }

@@ -1,12 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import Link from "next/link"
 import type { ScheduleType } from "@/lib/types"
 import { SCHEDULE_CONFIG } from "@/lib/types"
 import { GlobalHeader } from "@/components/global-header"
 import { ChevronRight, Blocks } from "lucide-react"
-import { ScheduleBuilder } from "@/components/schedule-builder"
-
 
 const SCHEDULE_ICONS: Record<ScheduleType, string> = {
   louvor: "🎵",
@@ -36,25 +34,10 @@ const SCHEDULE_COLORS: Record<ScheduleType, { bg: string; text: string; border: 
 }
 
 export default function EscalaPage() {
-  const [selectedType, setSelectedType] = useState<ScheduleType | null>(null)
-
-  if (selectedType) {
-    return (
-      <ScheduleBuilder
-        scheduleType={selectedType}
-        onBack={() => setSelectedType(null)}
-        showMergedCells={true}
-      />
-    )
-  }
-
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       <GlobalHeader />
       <div className="flex flex-1 items-center justify-center px-4">
-        <div className="absolute top-20 right-4">
-        </div>
-
         <div className="w-full max-w-md space-y-6">
           <div className="flex flex-col items-center gap-2">
             <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-primary/10 text-primary">
@@ -73,9 +56,9 @@ export default function EscalaPage() {
               const config = SCHEDULE_CONFIG[type]
               const colors = SCHEDULE_COLORS[type]
               return (
-                <button
+                <Link
                   key={type}
-                  onClick={() => setSelectedType(type)}
+                  href={`/escala/${type}`}
                   className={`flex items-center gap-4 w-full rounded-xl border px-4 py-4 transition-all active:scale-[0.98] ${colors.bg} ${colors.border} ${colors.hover}`}
                 >
                   <span
@@ -92,7 +75,7 @@ export default function EscalaPage() {
                     </span>
                   </div>
                   <ChevronRight className={`ml-auto h-5 w-5 ${colors.text} opacity-50`} />
-                </button>
+                </Link>
               )
             })}
           </div>
