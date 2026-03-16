@@ -33,7 +33,7 @@ export const BAND_ROLES = [
 
 export const SOUND_ROLES = [
   { key: 'mesa_som', label: 'Mesa de Som', icon: '🎚️' },
-  { key: 'iluminacao', label: 'Iluminação', icon: '💡' },
+  { key: 'apoio', label: 'Apoio', icon: '🎛' },
 ] as const
 
 export const MEDIA_ROLES = [
