@@ -32,6 +32,7 @@ import {
   type BuiltScheduleEntry,
   type RoleType,
   getRolesForScheduleType,
+  MEDIA_ROLES,
 } from "@/lib/schedule-builder-api"
 import { GlobalHeader } from "./global-header"
 
@@ -124,7 +125,7 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
   const [isExporting, setIsExporting] = useState(false)
   const [builtEntries, setBuiltEntries] = useState<BuiltScheduleEntry[]>([])
   const [membersCache, setMembersCache] = useState<Record<string, MemberAvailability[]>>({})
-  const [pickerOpen, setPickerOpen] = useState<{ role: RoleType, dates: string[] } | null>(null)
+  const [pickerOpen, setPickerOpen] = useState<{ role: RoleType, dates: string[], cacheKey?: string, isMidia?: boolean } | null>(null)
   
   const [customDates, setCustomDates] = useState<Record<string, Date>>({})
   const [dateEditorOpen, setDateEditorOpen] = useState<{ original: Date; current: Date } | null>(null)
@@ -179,8 +180,16 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
     setIsLoading(true)
     try {
       const { getBuiltScheduleEntries } = await import("@/lib/schedule-builder-api")
-      const entries = await getBuiltScheduleEntries(scheduleType, format(startOfMonth(currentMonthDate), "yyyy-MM-dd"), format(endOfMonth(currentMonthDate), "yyyy-MM-dd"))
-      setBuiltEntries(entries)
+      const startDate = format(startOfMonth(currentMonthDate), "yyyy-MM-dd")
+      const endDate = format(endOfMonth(currentMonthDate), "yyyy-MM-dd")
+      const entries = await getBuiltScheduleEntries(scheduleType, startDate, endDate)
+      // Quando for sonoplastia, também carrega as entradas de mídia para exibir na tabela
+      if (scheduleType === "sonoplastia") {
+        const midiaEntries = await getBuiltScheduleEntries("midia", startDate, endDate)
+        setBuiltEntries([...entries, ...midiaEntries])
+      } else {
+        setBuiltEntries(entries)
+      }
     } finally { setIsLoading(false) }
   }, [scheduleType, currentMonthDate])
 
@@ -188,12 +197,13 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
 
   const handleAssign = async (member: MemberAvailability) => {
     if (!pickerOpen) return
-    const { role, dates } = pickerOpen
-    setBuiltEntries(prev => [...prev.filter(e => !(dates.includes(e.schedule_date) && e.role === role.key)), ...dates.map(date => ({ id: crypto.randomUUID(), schedule_type: scheduleType, schedule_date: date, role: role.key, member_name: member.name, member_email: member.email }))])
+    const { role, dates, isMidia } = pickerOpen
+    const targetType = isMidia ? "midia" : scheduleType
+    setBuiltEntries(prev => [...prev.filter(e => !(dates.includes(e.schedule_date) && e.role === role.key)), ...dates.map(date => ({ id: crypto.randomUUID(), schedule_type: targetType as ScheduleType, schedule_date: date, role: role.key, member_name: member.name, member_email: member.email }))])
     setPickerOpen(null)
     try {
       const { upsertBuiltScheduleEntry } = await import("@/lib/schedule-builder-api")
-      await Promise.all(dates.map(d => upsertBuiltScheduleEntry(scheduleType, d, role.key, member.name, member.email)))
+      await Promise.all(dates.map(d => upsertBuiltScheduleEntry(targetType as ScheduleType, d, role.key, member.name, member.email)))
     } catch { loadData() }
   }
 
@@ -292,25 +302,80 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
                 </tr>
               </thead>
               <tbody>
-                {getRolesForScheduleType(scheduleType).map(role => (
-                  <tr key={role.key} className="border-b hover:bg-muted/30 transition-colors">
-                    <td className="sticky left-0 z-[5] bg-background px-3 py-2.5 border-r w-[130px]"><div className="flex items-center gap-2"><span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 text-primary shrink-0 text-lg">{role.icon}</span><span className="font-medium text-xs truncate text-foreground">{role.label}</span></div></td>
+                {getRolesForScheduleType(scheduleType).map(role => {
+                  // Para sonoplastia: "apoio" só aparece no domingo (culto), ensaio fica vazio
+                  const isSoundApoio = scheduleType === "sonoplastia" && role.key === "apoio"
+                  return (
+                    <tr key={role.key} className="border-b hover:bg-muted/30 transition-colors">
+                      <td className="sticky left-0 z-[5] bg-background px-3 py-2.5 border-r w-[130px]"><div className="flex items-center gap-2"><span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 text-primary shrink-0 text-lg">{role.icon}</span><span className="font-medium text-xs truncate text-foreground">{role.label}</span></div></td>
+                      {groupedColumns.map(col => {
+                        const dates = [col.thursday, col.sunday].filter(Boolean).map(d => format(d!, "yyyy-MM-dd"))
+                        // Para apoio na sonoplastia: se a coluna é de ensaio (quinta), célula vazia
+                        const isThursdayOnly = col.thursday && !col.sunday
+                        if (isSoundApoio && isThursdayOnly) {
+                          return <td key={col.colKey} className="px-2 py-2 text-center min-w-[120px]"><span className="text-muted-foreground/30 text-xs">--</span></td>
+                        }
+                        // Para apoio mesclado: usar só a data do domingo
+                        const effectiveDates = isSoundApoio && col.sunday ? [format(col.sunday, "yyyy-MM-dd")] : dates
+                        const assignment = builtEntries.find(e => e.schedule_date === effectiveDates[0] && e.role === role.key)
+                        return (
+                          <td key={col.colKey} className="px-2 py-2 text-center min-w-[120px]">
+                            <TooltipProvider delayDuration={300}><Tooltip><TooltipTrigger asChild>
+                                  <button onClick={async () => {
+                                      if (!membersCache[effectiveDates[0]]) {
+                                        const { getMembersWithAvailability } = await import("@/lib/schedule-builder-api")
+                                        const list = await getMembersWithAvailability(scheduleType, effectiveDates[0]); setMembersCache(p => ({ ...p, [effectiveDates[0]]: list }))
+                                      }
+                                      setPickerOpen({ role, dates: effectiveDates })
+                                    }}
+                                    className={`w-full rounded-lg border px-2 py-2 text-xs flex items-center justify-center gap-1.5 min-h-[40px] transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 ${assignment ? "bg-primary/5 border-primary/20 text-foreground" : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"}`}
+                                  >
+                                    {assignment ? (<><UserRound className="h-3 w-3 text-primary" /><span className="font-medium truncate">{assignment.member_name}</span></>) : <span className="text-muted-foreground/50">--</span>}
+                                  </button>
+                                </TooltipTrigger><TooltipContent><p className="text-xs">{assignment?.member_name || `Escalar ${role.label}`}</p></TooltipContent></Tooltip></TooltipProvider>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+                {/* Linhas de Mídia dentro da Sonoplastia — apenas domingos (culto) */}
+                {scheduleType === "sonoplastia" && (MEDIA_ROLES as readonly RoleType[]).map(role => (
+                  <tr key={`midia-${role.key}`} className="border-b hover:bg-muted/30 transition-colors bg-violet-50/30 dark:bg-violet-900/5">
+                    <td className="sticky left-0 z-[5] bg-violet-50/30 dark:bg-violet-900/10 px-3 py-2.5 border-r w-[130px]">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 shrink-0 text-lg">{role.icon}</span>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-medium text-xs truncate text-foreground">{role.label}</span>
+                          <span className="text-[10px] text-violet-500 dark:text-violet-400">Mídia</span>
+                        </div>
+                      </div>
+                    </td>
                     {groupedColumns.map(col => {
-                      const dates = [col.thursday, col.sunday].filter(Boolean).map(d => format(d!, "yyyy-MM-dd"))
-                      const assignment = builtEntries.find(e => e.schedule_date === dates[0] && e.role === role.key)
+                      // Só o domingo (culto) é escalável; ensaio fica vazio
+                      const isThursdayOnly = col.thursday && !col.sunday
+                      if (isThursdayOnly) {
+                        return <td key={col.colKey} className="px-2 py-2 text-center min-w-[120px]"><span className="text-muted-foreground/30 text-xs">--</span></td>
+                      }
+                      const sundayDate = col.sunday ? format(col.sunday, "yyyy-MM-dd") : null
+                      if (!sundayDate) return <td key={col.colKey} className="px-2 py-2 text-center min-w-[120px]"><span className="text-muted-foreground/30 text-xs">--</span></td>
+                      const assignment = builtEntries.find(e => e.schedule_date === sundayDate && e.role === role.key)
                       return (
                         <td key={col.colKey} className="px-2 py-2 text-center min-w-[120px]">
                           <TooltipProvider delayDuration={300}><Tooltip><TooltipTrigger asChild>
                                 <button onClick={async () => {
-                                    if (!membersCache[dates[0]]) {
+                                    // Busca membros da mídia para a data do domingo
+                                    const midiaCacheKey = `midia-${sundayDate}`
+                                    if (!membersCache[midiaCacheKey]) {
                                       const { getMembersWithAvailability } = await import("@/lib/schedule-builder-api")
-                                      const list = await getMembersWithAvailability(scheduleType, dates[0]); setMembersCache(p => ({ ...p, [dates[0]]: list }))
+                                      const list = await getMembersWithAvailability("midia", sundayDate)
+                                      setMembersCache(p => ({ ...p, [midiaCacheKey]: list }))
                                     }
-                                    setPickerOpen({ role, dates })
+                                    setPickerOpen({ role, dates: [sundayDate], cacheKey: midiaCacheKey, isMidia: true })
                                   }}
-                                  className={`w-full rounded-lg border px-2 py-2 text-xs flex items-center justify-center gap-1.5 min-h-[40px] transition-all hover:ring-2 hover:ring-primary/30 active:scale-95 ${assignment ? "bg-primary/5 border-primary/20 text-foreground" : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"}`}
+                                  className={`w-full rounded-lg border px-2 py-2 text-xs flex items-center justify-center gap-1.5 min-h-[40px] transition-all hover:ring-2 hover:ring-violet-400/40 active:scale-95 ${assignment ? "bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-800 text-foreground" : "bg-muted/30 border-dashed border-muted-foreground/20 text-muted-foreground"}`}
                                 >
-                                  {assignment ? (<><UserRound className="h-3 w-3 text-primary" /><span className="font-medium truncate">{assignment.member_name}</span></>) : <span className="text-muted-foreground/50">--</span>}
+                                  {assignment ? (<><UserRound className="h-3 w-3 text-violet-500" /><span className="font-medium truncate">{assignment.member_name}</span></>) : <span className="text-muted-foreground/50">--</span>}
                                 </button>
                               </TooltipTrigger><TooltipContent><p className="text-xs">{assignment?.member_name || `Escalar ${role.label}`}</p></TooltipContent></Tooltip></TooltipProvider>
                         </td>
@@ -329,7 +394,8 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
           <DialogHeader><DialogTitle className="text-sm font-bold">Alterar dia do Ensaio</DialogTitle></DialogHeader>
           <div className="grid grid-cols-1 gap-1.5 mt-2">
             {[0, 1, 2, 3, 4, 5, 6].map((dayIdx) => {
-              const baseDate = startOfWeek(dateEditorOpen?.original || new Date(), { weekStartsOn: 0 })
+              // weekStartsOn: 1 (segunda) → vai de segunda até domingo (inclusive o domingo do culto)
+              const baseDate = startOfWeek(dateEditorOpen?.original || new Date(), { weekStartsOn: 1 })
               const d = new Date(baseDate); d.setDate(baseDate.getDate() + dayIdx)
               const isSelected = format(d, "dd/MM") === format(getDisplayDate(dateEditorOpen?.original || new Date()), "dd/MM")
               return (
@@ -352,14 +418,15 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
       {pickerOpen && (
         <MemberPickerDialog
           open={!!pickerOpen} onClose={() => setPickerOpen(null)}
-          members={membersCache[pickerOpen.dates[0]] || []}
+          members={membersCache[pickerOpen.cacheKey ?? pickerOpen.dates[0]] || []}
           role={pickerOpen.role} dates={pickerOpen.dates}
           onSelect={handleAssign}
           onRemove={async () => {
             const { removeBuiltScheduleEntry } = await import("@/lib/schedule-builder-api")
+            const targetType = pickerOpen.isMidia ? "midia" : scheduleType
             setBuiltEntries(p => p.filter(e => !(pickerOpen.dates.includes(e.schedule_date) && e.role === pickerOpen.role.key)))
             setPickerOpen(null)
-            await Promise.all(pickerOpen.dates.map(d => removeBuiltScheduleEntry(scheduleType, d, pickerOpen.role.key)))
+            await Promise.all(pickerOpen.dates.map(d => removeBuiltScheduleEntry(targetType as ScheduleType, d, pickerOpen.role.key)))
           }}
           currentMemberEmail={builtEntries.find(e => e.schedule_date === pickerOpen.dates[0] && e.role === pickerOpen.role.key)?.member_email}
         />
