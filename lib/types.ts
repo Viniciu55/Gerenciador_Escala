@@ -44,7 +44,7 @@ export const SCHEDULE_CONFIG: Record<ScheduleType, {
     label: 'Sonoplastia',
     membersTable: 'members_sonoplastia',
     entriesTable: 'schedule_entries_sonoplastia',
-    description: 'Escala da Sonoplastia',
+    description: 'Escala da Sonoplastia/Mídia',
     sundaysOnly: false,
   },
   midia: {
