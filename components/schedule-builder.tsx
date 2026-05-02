@@ -147,12 +147,19 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
   }
 
   const weeksInMonth = useMemo(() => {
-    const allDaysOfMonth = getScheduleDays(currentMonthDate, config.sundaysOnly, "month")
+    // Usar apenas os dias que realmente pertencem ao mês atual (não os adjacentes)
+    const start = startOfMonth(currentMonthDate)
+    const end = endOfMonth(currentMonthDate)
+    const daysInMonth = eachDayOfInterval({ start, end }).filter(d => 
+      config.sundaysOnly ? getDay(d) === 0 : (getDay(d) === 4 || getDay(d) === 0)
+    )
+    
     const weeks: Date[] = []
-    const seenWeeks = new Set()
+    const seenWeeks = new Set<string>()
 
-    allDaysOfMonth.forEach(day => {
-      const weekKey = format(startOfWeek(day, { weekStartsOn: 0 }), "yyyy-MM-dd")
+    daysInMonth.forEach(day => {
+      // Usar weekStartsOn: 4 (quinta) para agrupar semanas corretamente (quinta a domingo)
+      const weekKey = format(startOfWeek(day, { weekStartsOn: 4 }), "yyyy-MM-dd")
       if (!seenWeeks.has(weekKey)) {
         seenWeeks.add(weekKey)
         weeks.push(day)
@@ -180,8 +187,14 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
     setIsLoading(true)
     try {
       const { getBuiltScheduleEntries } = await import("@/lib/schedule-builder-api")
-      const startDate = format(startOfMonth(currentMonthDate), "yyyy-MM-dd")
-      const endDate = format(endOfMonth(currentMonthDate), "yyyy-MM-dd")
+      // Expandir o range para incluir dias adjacentes (até 7 dias antes e depois)
+      // Isso garante que o último ensaio do mês anterior e primeiro do próximo apareçam corretamente
+      const expandedStart = new Date(startOfMonth(currentMonthDate))
+      expandedStart.setDate(expandedStart.getDate() - 7)
+      const expandedEnd = new Date(endOfMonth(currentMonthDate))
+      expandedEnd.setDate(expandedEnd.getDate() + 7)
+      const startDate = format(expandedStart, "yyyy-MM-dd")
+      const endDate = format(expandedEnd, "yyyy-MM-dd")
       const entries = await getBuiltScheduleEntries(scheduleType, startDate, endDate)
       // Quando for sonoplastia, também carrega as entradas de mídia para exibir na tabela
       if (scheduleType === "sonoplastia") {
@@ -212,9 +225,31 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
     setIsExporting(true)
     try {
       const { toPng } = await import("html-to-image")
+      // Largura fixa estilo mobile para garantir consistência entre dispositivos
+      // Usa a largura natural da tabela mas limita os nomes para evitar overflow
       const wrapper = document.createElement("div")
-      wrapper.style.cssText = `position:fixed;top:0;left:0;width:${exportRef.current.scrollWidth}px;background:${document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#fff"};z-index:-1`
+      wrapper.style.cssText = `position:fixed;top:0;left:0;background:${document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#fff"};z-index:-1;padding:8px;`
       const clone = exportRef.current.cloneNode(true) as HTMLElement
+      clone.style.cssText = "font-size:12px;max-width:100%;"
+      // Ajustar nomes longos para truncar corretamente e evitar overflow
+      const nameCells = clone.querySelectorAll("span.truncate")
+      nameCells.forEach(cell => {
+        const el = cell as HTMLElement
+        el.style.maxWidth = "55px"
+        el.style.display = "inline-block"
+        el.style.overflow = "hidden"
+        el.style.textOverflow = "ellipsis"
+        el.style.whiteSpace = "nowrap"
+      })
+      // Ajustar células da tabela para largura consistente
+      const tableCells = clone.querySelectorAll("td, th")
+      tableCells.forEach(cell => {
+        const el = cell as HTMLElement
+        if (!el.classList.contains("sticky")) {
+          el.style.minWidth = "90px"
+          el.style.maxWidth = "100px"
+        }
+      })
       wrapper.appendChild(clone); document.body.appendChild(wrapper)
       const dataUrl = await toPng(wrapper, { pixelRatio: 2 })
       document.body.removeChild(wrapper)
@@ -244,7 +279,7 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
           {viewMode === "week" && (
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full">
               {weeksInMonth.map((weekDate, i) => {
-                const isSelected = isSameWeek(weekDate, selectedWeekDate, { weekStartsOn: 0 });
+                  const isSelected = isSameWeek(weekDate, selectedWeekDate, { weekStartsOn: 4 });
                 return (
                   <button key={i} onClick={() => setSelectedWeekDate(weekDate)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold transition-all ${isSelected ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
                     Sem {i + 1}
