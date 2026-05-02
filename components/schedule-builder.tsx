@@ -53,33 +53,78 @@ function getScheduleDays(monthDate: Date, sundaysOnly: boolean, viewMode: "month
     return eachDayOfInterval({ start, end }).filter(d => sundaysOnly ? getDay(d) === 0 : (getDay(d) === 4 || getDay(d) === 0))
   }
 
-  const start = startOfMonth(monthDate)
-  const end = endOfMonth(monthDate)
-  let allDays = eachDayOfInterval({ start, end })
+  // Expandir o range para incluir dias adjacentes (7 dias antes e depois do mes)
+  // Isso garante que quintas do mes anterior e domingos do proximo mes aparecam
+  const expandedStart = new Date(startOfMonth(monthDate))
+  expandedStart.setDate(expandedStart.getDate() - 7)
+  const expandedEnd = new Date(endOfMonth(monthDate))
+  expandedEnd.setDate(expandedEnd.getDate() + 7)
+  
+  let allDays = eachDayOfInterval({ start: expandedStart, end: expandedEnd })
 
-  // Filtrar apenas os dias de interesse primeiro (Quintas e Domingos)
+  // Filtrar apenas os dias de interesse (Quintas e Domingos)
   let filteredDays = allDays.filter(d => sundaysOnly ? getDay(d) === 0 : (getDay(d) === 4 || getDay(d) === 0))
 
   if (!sundaysOnly && filteredDays.length > 0) {
-    // CORREÇÃO INÍCIO: Se o primeiro dia encontrado for Domingo (0), 
-    // precisamos buscar a Quinta (4) imediatamente anterior para o par Ensaio/Culto.
-    if (getDay(filteredDays[0]) === 0) {
-      const prevThursday = new Date(filteredDays[0])
-      prevThursday.setDate(prevThursday.getDate() - 3)
-      filteredDays = [prevThursday, ...filteredDays]
+    // Agrupar em pares de quinta-domingo
+    const pairs: Date[] = []
+    for (let i = 0; i < filteredDays.length; i++) {
+      const day = filteredDays[i]
+      if (getDay(day) === 4) {
+        // E uma quinta - verificar se o proximo e o domingo correspondente
+        pairs.push(day)
+        if (i + 1 < filteredDays.length && getDay(filteredDays[i + 1]) === 0) {
+          // O proximo e domingo, verificar se e o par correto (3 dias depois)
+          const expectedSunday = new Date(day)
+          expectedSunday.setDate(day.getDate() + 3)
+          if (format(filteredDays[i + 1], "yyyy-MM-dd") === format(expectedSunday, "yyyy-MM-dd")) {
+            pairs.push(filteredDays[i + 1])
+            i++ // pular o domingo ja adicionado
+          }
+        }
+      } else if (getDay(day) === 0) {
+        // E um domingo sem quinta anterior no array - incluir sozinho
+        // (isso nao deveria acontecer com o range expandido, mas por seguranca)
+        pairs.push(day)
+      }
     }
-
-    // CORREÇÃO FIM: Se o último dia encontrado for Quinta (4),
-    // precisamos buscar o Domingo (0) imediatamente posterior para fechar o par.
-    const lastDay = filteredDays[filteredDays.length - 1]
-    if (getDay(lastDay) === 4) {
-      const nextSunday = new Date(lastDay)
-      nextSunday.setDate(nextSunday.getDate() + 3)
-      filteredDays = [...filteredDays, nextSunday]
+    filteredDays = pairs
+    
+    // Filtrar para manter apenas os pares que tem pelo menos um dia no mes atual
+    const monthStart = startOfMonth(monthDate)
+    const monthEnd = endOfMonth(monthDate)
+    const relevantDays: Date[] = []
+    
+    for (let i = 0; i < filteredDays.length; i++) {
+      const day = filteredDays[i]
+      const isInMonth = day >= monthStart && day <= monthEnd
+      
+      if (isInMonth) {
+        relevantDays.push(day)
+      } else if (getDay(day) === 4) {
+        // Quinta fora do mes - incluir se o domingo correspondente estiver no mes
+        const expectedSunday = new Date(day)
+        expectedSunday.setDate(day.getDate() + 3)
+        if (expectedSunday >= monthStart && expectedSunday <= monthEnd) {
+          relevantDays.push(day)
+        }
+      } else if (getDay(day) === 0) {
+        // Domingo fora do mes - incluir se a quinta correspondente estiver no mes
+        const expectedThursday = new Date(day)
+        expectedThursday.setDate(day.getDate() - 3)
+        if (expectedThursday >= monthStart && expectedThursday <= monthEnd) {
+          relevantDays.push(day)
+        }
+      }
     }
+    
+    return relevantDays
   }
 
-  return filteredDays
+  // Para sundaysOnly, filtrar apenas domingos do mes
+  const monthStart = startOfMonth(monthDate)
+  const monthEnd = endOfMonth(monthDate)
+  return filteredDays.filter(d => d >= monthStart && d <= monthEnd)
 }
 
 function MemberPickerDialog({ open, onClose, members, role, dates, onSelect, onRemove, currentMemberEmail }: any) {
@@ -203,6 +248,7 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
       } else {
         setBuiltEntries(entries)
       }
+
     } finally { setIsLoading(false) }
   }, [scheduleType, currentMonthDate])
 
@@ -226,29 +272,37 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
     try {
       const { toPng } = await import("html-to-image")
       // Largura fixa estilo mobile para garantir consistência entre dispositivos
-      // Usa a largura natural da tabela mas limita os nomes para evitar overflow
+      const EXPORT_WIDTH = 380
       const wrapper = document.createElement("div")
-      wrapper.style.cssText = `position:fixed;top:0;left:0;background:${document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#fff"};z-index:-1;padding:8px;`
+      wrapper.style.cssText = `position:fixed;top:0;left:0;width:${EXPORT_WIDTH}px;background:${document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#fff"};z-index:-1;padding:8px;`
       const clone = exportRef.current.cloneNode(true) as HTMLElement
-      clone.style.cssText = "font-size:12px;max-width:100%;"
-      // Ajustar nomes longos para truncar corretamente e evitar overflow
+      clone.style.cssText = "font-size:11px;width:100%;"
+      // Remover truncate dos nomes para aparecerem completos
       const nameCells = clone.querySelectorAll("span.truncate")
       nameCells.forEach(cell => {
         const el = cell as HTMLElement
-        el.style.maxWidth = "55px"
-        el.style.display = "inline-block"
-        el.style.overflow = "hidden"
-        el.style.textOverflow = "ellipsis"
-        el.style.whiteSpace = "nowrap"
+        el.classList.remove("truncate")
+        el.style.whiteSpace = "normal"
+        el.style.wordBreak = "break-word"
+        el.style.overflow = "visible"
+        el.style.display = "block"
+        el.style.lineHeight = "1.2"
       })
-      // Ajustar células da tabela para largura consistente
+      // Ajustar células da tabela para acomodar nomes completos
       const tableCells = clone.querySelectorAll("td, th")
       tableCells.forEach(cell => {
         const el = cell as HTMLElement
         if (!el.classList.contains("sticky")) {
-          el.style.minWidth = "90px"
-          el.style.maxWidth = "100px"
+          el.style.minWidth = "70px"
+          el.style.padding = "6px 4px"
         }
+      })
+      // Ajustar botões dentro das células para expandir com o conteúdo
+      const buttons = clone.querySelectorAll("button")
+      buttons.forEach(btn => {
+        btn.style.minHeight = "auto"
+        btn.style.height = "auto"
+        btn.style.padding = "6px 4px"
       })
       wrapper.appendChild(clone); document.body.appendChild(wrapper)
       const dataUrl = await toPng(wrapper, { pixelRatio: 2 })
