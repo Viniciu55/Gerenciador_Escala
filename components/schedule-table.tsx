@@ -52,12 +52,13 @@ function getMonthScheduleDays(monthDate: Date, sundaysOnly: boolean): Date[] {
   const end = endOfMonth(monthDate)
   let allDays = eachDayOfInterval({ start, end })
   
+  
   // Filtra apenas os dias de interesse dentro do mês atual (Quintas e Domingos)
   let filteredDays = allDays.filter((day) => {
     const dow = getDay(day)
     return sundaysOnly ? dow === 0 : (dow === 4 || dow === 0)
   })
-
+  /*
   // Se o mês começar em um Domingo (0), busca a Quinta (4) do mês anterior
   if (!sundaysOnly && filteredDays.length > 0) {
     if (getDay(filteredDays[0]) === 0) {
@@ -65,7 +66,7 @@ function getMonthScheduleDays(monthDate: Date, sundaysOnly: boolean): Date[] {
       prevThursday.setDate(prevThursday.getDate() - 3)
       filteredDays = [prevThursday, ...filteredDays]
     }
-  }
+  }*/
   
   return filteredDays
 }

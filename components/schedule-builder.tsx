@@ -60,7 +60,7 @@ function getScheduleDays(monthDate: Date, sundaysOnly: boolean, viewMode: "month
   // Filtrar apenas os dias de interesse primeiro (Quintas e Domingos)
   let filteredDays = allDays.filter(d => sundaysOnly ? getDay(d) === 0 : (getDay(d) === 4 || getDay(d) === 0))
 
-  if (!sundaysOnly && filteredDays.length > 0) {
+  /*if (!sundaysOnly && filteredDays.length > 0) {
     // CORREÇÃO INÍCIO: Se o primeiro dia encontrado for Domingo (0), 
     // precisamos buscar a Quinta (4) imediatamente anterior para o par Ensaio/Culto.
     if (getDay(filteredDays[0]) === 0) {
@@ -77,7 +77,7 @@ function getScheduleDays(monthDate: Date, sundaysOnly: boolean, viewMode: "month
       nextSunday.setDate(nextSunday.getDate() + 3)
       filteredDays = [...filteredDays, nextSunday]
     }
-  }
+  }*/
 
   return filteredDays
 }
@@ -244,7 +244,7 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
           {viewMode === "week" && (
             <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full">
               {weeksInMonth.map((weekDate, i) => {
-                const isSelected = isSameWeek(weekDate, selectedWeekDate, { weekStartsOn: 0 });
+                const isSelected = isSameWeek(weekDate, selectedWeekDate, { weekStartsOn: 1 });
                 return (
                   <button key={i} onClick={() => setSelectedWeekDate(weekDate)} className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold transition-all ${isSelected ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
                     Sem {i + 1}
@@ -263,7 +263,7 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
           <div className="flex flex-col items-center justify-center py-20 gap-2"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>
         ) : (
           <div ref={exportRef} className="bg-background p-1">
-            <div className="px-4 py-3 border-b flex items-center gap-3"><img src="/logo.jpg" alt="Logo" className="h-10 w-10 rounded-full object-cover" /><h2 className="text-sm font-bold text-foreground">Escala {config.label} - {monthLabel}</h2></div>
+            <div className="px-4 py-3 border-b flex items-center gap-3"><img src="/logo.jpg" alt="Logo" className="h-10 w-10 rounded-full object-cover" /><h2 className="text-sm font-bold text-foreground">Escala - {config.label} ({monthLabel})</h2></div>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b bg-muted/40">
