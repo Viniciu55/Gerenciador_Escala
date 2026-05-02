@@ -299,30 +299,33 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
       // Calcular largura maxima de cada coluna e aplicar a todas as celulas
       const table = clone.querySelector("table")
       if (table) {
-        const rows = table.querySelectorAll("tr")
+        const rows = Array.from(table.querySelectorAll("tr"))
         const colWidths: number[] = []
         
         // Primeira passagem: encontrar a largura maxima de cada coluna
-        rows.forEach(row => {
-          const cells = row.querySelectorAll("td, th")
-          cells.forEach((cell, colIndex) => {
-            const width = (cell as HTMLElement).offsetWidth
-            if (!colWidths[colIndex] || width > colWidths[colIndex]) {
+        for (const row of rows) {
+          const cells = Array.from(row.querySelectorAll("td, th"))
+          for (let colIndex = 0; colIndex < cells.length; colIndex++) {
+            const cell = cells[colIndex] as HTMLElement
+            const width = cell.offsetWidth
+            if (colWidths[colIndex] === undefined || width > colWidths[colIndex]) {
               colWidths[colIndex] = width
             }
-          })
-        })
+          }
+        }
         
         // Segunda passagem: aplicar a largura maxima a todas as celulas da coluna
-        rows.forEach(row => {
-          const cells = row.querySelectorAll("td, th")
-          cells.forEach((cell, colIndex) => {
-            if (colWidths[colIndex] && colIndex > 0) { // Pular a primeira coluna (roles)
-              (cell as HTMLElement).style.minWidth = `${colWidths[colIndex]}px`
-              (cell as HTMLElement).style.width = `${colWidths[colIndex]}px`
+        for (const row of rows) {
+          const cells = Array.from(row.querySelectorAll("td, th"))
+          for (let colIndex = 1; colIndex < cells.length; colIndex++) { // Pular primeira coluna (roles)
+            const cell = cells[colIndex] as HTMLElement
+            const maxWidth = colWidths[colIndex]
+            if (maxWidth !== undefined) {
+              cell.style.minWidth = `${maxWidth}px`
+              cell.style.width = `${maxWidth}px`
             }
-          })
-        })
+          }
+        }
       }
       
       const dataUrl = await toPng(wrapper, { pixelRatio: 2 })
