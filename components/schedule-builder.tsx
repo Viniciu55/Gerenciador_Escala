@@ -60,7 +60,7 @@ function getScheduleDays(monthDate: Date, sundaysOnly: boolean, viewMode: "month
   // Filtrar apenas os dias de interesse primeiro (Quintas e Domingos)
   let filteredDays = allDays.filter(d => sundaysOnly ? getDay(d) === 0 : (getDay(d) === 4 || getDay(d) === 0))
 
-  /*if (!sundaysOnly && filteredDays.length > 0) {
+  if (!sundaysOnly && filteredDays.length > 0) {
     // CORREÇÃO INÍCIO: Se o primeiro dia encontrado for Domingo (0), 
     // precisamos buscar a Quinta (4) imediatamente anterior para o par Ensaio/Culto.
     if (getDay(filteredDays[0]) === 0) {
@@ -77,7 +77,7 @@ function getScheduleDays(monthDate: Date, sundaysOnly: boolean, viewMode: "month
       nextSunday.setDate(nextSunday.getDate() + 3)
       filteredDays = [...filteredDays, nextSunday]
     }
-  }*/
+  }
 
   return filteredDays
 }
@@ -207,6 +207,7 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
     } catch { loadData() }
   }
 
+  /*
   const handleExport = async () => {
     if (!exportRef.current) return
     setIsExporting(true)
@@ -220,6 +221,45 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
       document.body.removeChild(wrapper)
       const link = document.createElement("a"); link.download = `escala-${config.label.toLowerCase()}.png`; link.href = dataUrl; link.click()
     } finally { setIsExporting(false) }
+  }*/
+  const handleExport = async () => {
+    if (!exportRef.current) return
+    setIsExporting(true)
+    try {
+      const { toPng } = await import("html-to-image")
+      const wrapper = document.createElement("div")
+      
+      // 'max-content' garante que a largura seja ditada pelo conteúdo da tabela,
+      // sem ser fixa e sem se esticar para ocupar a largura da tela do PC.
+      wrapper.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: max-content; 
+        background: ${document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#fff"};
+        z-index: -1;
+      `
+      
+      const clone = exportRef.current.cloneNode(true) as HTMLElement
+      
+      // Removemos qualquer restrição que force a tabela a ocupar a largura total do monitor
+      clone.style.width = "auto"
+      clone.style.minWidth = "auto"
+      clone.style.maxWidth = "none"
+
+      wrapper.appendChild(clone)
+      document.body.appendChild(wrapper)
+      
+      const dataUrl = await toPng(wrapper, { pixelRatio: 2 })
+      document.body.removeChild(wrapper)
+      
+      const link = document.createElement("a")
+      link.download = `escala-${config.label.toLowerCase()}.png`
+      link.href = dataUrl
+      link.click()
+    } finally { 
+      setIsExporting(false) 
+    }
   }
 
   return (
