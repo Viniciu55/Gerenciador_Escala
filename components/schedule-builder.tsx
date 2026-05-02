@@ -222,12 +222,12 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
     setIsLoading(true)
     try {
       const { getBuiltScheduleEntries } = await import("@/lib/schedule-builder-api")
-      // Expandir o range para incluir dias adjacentes (até 7 dias antes e depois)
+      // Expandir o range para incluir dias adjacentes (até 10 dias antes e depois)
       // Isso garante que o último ensaio do mês anterior e primeiro do próximo apareçam corretamente
       const expandedStart = new Date(startOfMonth(currentMonthDate))
-      expandedStart.setDate(expandedStart.getDate() - 7)
+      expandedStart.setDate(expandedStart.getDate() - 10)
       const expandedEnd = new Date(endOfMonth(currentMonthDate))
-      expandedEnd.setDate(expandedEnd.getDate() + 7)
+      expandedEnd.setDate(expandedEnd.getDate() + 10)
       const startDate = format(expandedStart, "yyyy-MM-dd")
       const endDate = format(expandedEnd, "yyyy-MM-dd")
       const entries = await getBuiltScheduleEntries(scheduleType, startDate, endDate)
@@ -262,10 +262,10 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
     try {
       const { toPng } = await import("html-to-image")
       const wrapper = document.createElement("div")
-      // Nao definir largura fixa - deixar a tabela expandir naturalmente
       wrapper.style.cssText = `position:fixed;top:0;left:0;background:${document.documentElement.classList.contains("dark") ? "#1a1a2e" : "#fff"};z-index:-1;padding:8px;`
       const clone = exportRef.current.cloneNode(true) as HTMLElement
       clone.style.cssText = "font-size:11px;"
+      
       // Remover truncate e garantir que nomes fiquem em UMA linha (expandir horizontalmente)
       const nameCells = clone.querySelectorAll("span.truncate")
       nameCells.forEach(cell => {
@@ -276,14 +276,14 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
         el.style.textOverflow = "unset"
         el.style.maxWidth = "none"
       })
-      // Ajustar celulas da tabela para expandir com o conteudo (horizontal)
+      
+      // Ajustar celulas e botoes para expandir com o conteudo
       const tableCells = clone.querySelectorAll("td, th")
       tableCells.forEach(cell => {
         const el = cell as HTMLElement
         el.style.whiteSpace = "nowrap"
         el.style.padding = "6px 8px"
       })
-      // Ajustar botoes para nao limitar largura
       const buttons = clone.querySelectorAll("button")
       buttons.forEach(btn => {
         btn.style.minHeight = "auto"
@@ -292,7 +292,39 @@ export function ScheduleBuilder({ scheduleType, onBack, showMergedCells = false 
         btn.style.width = "auto"
         btn.style.minWidth = "fit-content"
       })
-      wrapper.appendChild(clone); document.body.appendChild(wrapper)
+      
+      wrapper.appendChild(clone)
+      document.body.appendChild(wrapper)
+      
+      // Calcular largura maxima de cada coluna e aplicar a todas as celulas
+      const table = clone.querySelector("table")
+      if (table) {
+        const rows = table.querySelectorAll("tr")
+        const colWidths: number[] = []
+        
+        // Primeira passagem: encontrar a largura maxima de cada coluna
+        rows.forEach(row => {
+          const cells = row.querySelectorAll("td, th")
+          cells.forEach((cell, colIndex) => {
+            const width = (cell as HTMLElement).offsetWidth
+            if (!colWidths[colIndex] || width > colWidths[colIndex]) {
+              colWidths[colIndex] = width
+            }
+          })
+        })
+        
+        // Segunda passagem: aplicar a largura maxima a todas as celulas da coluna
+        rows.forEach(row => {
+          const cells = row.querySelectorAll("td, th")
+          cells.forEach((cell, colIndex) => {
+            if (colWidths[colIndex] && colIndex > 0) { // Pular a primeira coluna (roles)
+              (cell as HTMLElement).style.minWidth = `${colWidths[colIndex]}px`
+              (cell as HTMLElement).style.width = `${colWidths[colIndex]}px`
+            }
+          })
+        })
+      }
+      
       const dataUrl = await toPng(wrapper, { pixelRatio: 2 })
       document.body.removeChild(wrapper)
       const link = document.createElement("a"); link.download = `escala-${config.label.toLowerCase()}.png`; link.href = dataUrl; link.click()
